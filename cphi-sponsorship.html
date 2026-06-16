@@ -628,6 +628,40 @@ const ICON={
 };
 
 // ══════════════════════ SMARTSHEET ══════════════════════
+
+// Detect which show a product belongs to from its name
+function detectShowFromName(name){
+  const n=(name||'').toLowerCase();
+  if(n.includes('pharmapack')) return 'pharmapack';
+  if(n.includes("america")) return 'americas';
+  if(n.includes('frankfurt')||n.includes('cphi europe')||n.includes('milan')) return 'milan';
+  return 'digital';
+}
+
+// Map product class to a representative image and description
+const CLASS_META = {
+  'Display ad_Top position - CO Newsletter':    { img:'https://images.unsplash.com/photo-1587614382346-4ec70e388b28?w=400&q=60', desc:'Premium top-position banner in the CPHI Online Newsletter, reaching thousands of pharma professionals each week.' },
+  'Display ad_Middle position - CO Newsletter': { img:'https://images.unsplash.com/photo-1587614382346-4ec70e388b28?w=400&q=60', desc:'High-visibility mid-position banner in the CPHI Online Newsletter for consistent brand exposure.' },
+  'Column advertisement (DELE-Event)':          { img:'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=400&q=60', desc:'Full-height column advertisement on the event platform, offering prominent digital presence throughout the event.' },
+  'Pop Up & Push Notification Combo on SC':     { img:'https://images.unsplash.com/photo-1616469829581-73993eb86b02?w=400&q=60', desc:'Powerful combo of pop-up and push notifications on Showcare, driving immediate delegate engagement.' },
+  'Company Profile Enhance Package on SC':      { img:'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=400&q=60', desc:'Enhanced company profile on Showcare with premium placement and enriched content to attract buyers.' },
+  'Exhibitor Listing Booster Package on SC':    { img:'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=400&q=60', desc:'Boosted exhibitor listing on Showcare, increasing visibility among attending buyers and visitors.' },
+  'Featured Products Highlight on SC':          { img:'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?w=400&q=60', desc:'Spotlight your products in the Featured Products section on Showcare for maximum buyer discovery.' },
+  'Top Banner Exhibitor List on SC':            { img:'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=400&q=60', desc:'Premium top banner on the Showcare exhibitor list, seen by every delegate browsing exhibitors.' },
+  'Top Banner Product List on SC':              { img:'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=400&q=60', desc:'Top banner placement on the Showcare product list, capturing delegates actively searching for solutions.' },
+  'Custom Webinar':                             { img:'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60', desc:'Branded webinar hosted on the CPHI platform, positioning your company as a thought leader.' },
+  'Editorial Trend Report':                     { img:'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&q=60', desc:'Co-branded editorial trend report distributed to the CPHI audience, combining insight with brand exposure.' },
+  'Editorial Webinar':                          { img:'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60', desc:'Editorial-led webinar with CPHI branding, delivering thought leadership content to pharma professionals.' },
+  'FastChat':                                   { img:'https://images.unsplash.com/photo-1560439514-4e9645039924?w=400&q=60', desc:'Short-form on-site interview format capturing key messages in a fast, engaging video format.' },
+  'Event Extension':                            { img:'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&q=60', desc:'Extend your event presence with post-show digital content that keeps your brand visible after the doors close.' },
+  'Webinar Content Multiplier':                 { img:'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60', desc:'Amplify your webinar reach through CPHI channels, multiplying audience engagement beyond the live session.' },
+  'Event Content Multiplier':                   { img:'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&q=60', desc:'Boost your on-site content across CPHI digital platforms for extended reach and ROI.' },
+  'Webinar Key Takeaways':                      { img:'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60', desc:'Professionally produced key takeaways from your webinar, distributed as evergreen content.' },
+  'Event Guide Pre Event (Frankfurt 2025)':     { img:'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&q=60', desc:'Prominent placement in the official pre-event guide distributed to all registered attendees before the show.' },
+  'Event Key Takeaways (Frankfurt 2025)':       { img:'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&q=60', desc:'Your brand featured in the official post-event key takeaways report, distributed to all CPHI attendees.' },
+};
+const DEFAULT_META = { img:'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=400&q=60', desc:'Premium sponsorship opportunity at one of the world\'s leading pharmaceutical industry events.' };
+
 // Fetches each mapped show-sheet and tags its rows with that show.
 async function loadLiveProducts(announce){
   if(!PROXY_URL||!anySheet()) return;
@@ -641,35 +675,57 @@ async function loadLiveProducts(announce){
         const res=await fetch(`${PROXY_URL}/api/products/${sid}`);
         if(!res.ok) throw new Error('HTTP '+res.status);
         const data=await res.json();
-        const evts = slot==='digital' ? [...SHOW_KEYS,'online365'] : [slot]; // digital spans all shows + year-round 365
+
+        // Collect parent row descriptions (rows with "(X slots)" in name)
+        const parentDesc={};
+        data.products.filter(r=>/\(\d+\s*slots?\)/i.test(r[COL_MAP.name]||'')).forEach(r=>{
+          const cat=r[COL_MAP.category];
+          const show=detectShowFromName(r[COL_MAP.name]);
+          if(cat) parentDesc[show+'|'+cat]=r[COL_MAP.name].replace(/\s*\(\d+\s*slots?\)/i,'').trim();
+        });
+
         data.products
           .filter(r=>r[COL_MAP.name] && r[COL_MAP.category] && !/\(\d+\s*slots?\)/i.test(r[COL_MAP.name]))
-          .forEach((r,i)=>all.push({
-            id:'ss-'+slot+'-'+(r._rowId||i), _rowId:r._rowId, _sheet:sid,
-            name:r[COL_MAP.name]||'', cat:r[COL_MAP.category]||'Other',
-            price:parseFloat((r[COL_MAP.price]||'0').toString().split('/')[0].replace(/[^0-9.]/g,''))||0,
-            avail:normAvail(r[COL_MAP.availability]), _rawStatus:r[COL_MAP.availability]||'',
-            channel:slot==='digital'?'online':normChan(r[COL_MAP.channel]),
-            desc:r[COL_MAP.description]||'', image:r[COL_MAP.image]||'',
-            units:r[COL_MAP.unitsLeft]!=null&&r[COL_MAP.unitsLeft]!==''?parseInt(r[COL_MAP.unitsLeft]):null,
-            events:evts,
-            objectives:(r[COL_MAP.objectives]||'').split(',').map(o=>o.trim().toLowerCase()).filter(Boolean),
-          }));
+          .forEach((r,i)=>{
+            const show = detectShowFromName(r[COL_MAP.name]);
+            const evts = show==='digital' ? [...SHOW_KEYS,'online365'] : [show];
+            const meta = CLASS_META[r[COL_MAP.category]] || DEFAULT_META;
+            const parentName = parentDesc[show+'|'+r[COL_MAP.category]] || '';
+            all.push({
+              id:'ss-'+slot+'-'+(r._rowId||i), _rowId:r._rowId, _sheet:sid,
+              name:r[COL_MAP.name]||'', cat:r[COL_MAP.category]||'Other',
+              price:parseFloat((r[COL_MAP.price]||'0').toString().split('/')[0].replace(/[^0-9.]/g,''))||0,
+              avail:normAvail(r[COL_MAP.availability]), _rawStatus:r[COL_MAP.availability]||'',
+              channel:'online',
+              desc:meta.desc, image:meta.img,
+              parentName,
+              show,
+              units:null,
+              events:evts,
+              objectives:[],
+            });
+          });
       }catch(e){ failed.push(slot==='digital'?'Digital':(EVENTS[slot]?.short||slot)); }
     }
-    // Group individual slot rows by Product Class Description
+    // Group by show + Product Class Description
     const slotMap = new Map();
-    all.forEach(p=>{ const k=p.cat; if(!slotMap.has(k)) slotMap.set(k,[]); slotMap.get(k).push(p); });
+    all.forEach(p=>{
+      const k=p.show+'|'+p.cat;
+      if(!slotMap.has(k)) slotMap.set(k,[]);
+      slotMap.get(k).push(p);
+    });
     const grouped = [];
     slotMap.forEach((slots,key)=>{
       const avCount=slots.filter(s=>s.avail==='available').length;
       const ltdCount=slots.filter(s=>s.avail==='limited').length;
       const s0=slots[0];
+      const meta=CLASS_META[s0.cat]||DEFAULT_META;
       const gid='grp-'+key.replace(/[^a-z0-9]/gi,'-').toLowerCase();
-      grouped.push({ id:gid, name:key, cat:s0.channel==='online'?'Digital':s0.cat,
+      grouped.push({ id:gid, name:s0.cat, cat:s0.cat,
         price:s0.price, avail:avCount>0?'available':ltdCount>0?'limited':'sold',
-        channel:s0.channel, events:s0.events, desc:'', image:'', units:null,
-        objectives:s0.objectives, _slots:slots, _avCount:avCount, _total:slots.length });
+        channel:'online', events:s0.events, desc:meta.desc, image:meta.img, units:null,
+        show:s0.show, objectives:[],
+        _slots:slots, _avCount:avCount, _total:slots.length });
     });
     S.liveProducts = grouped.length?grouped:null;
     S.liveSlots = slotMap;
@@ -1270,22 +1326,39 @@ function renderProducts(){
   const grid=document.getElementById('prod-grid'); if(!grid) return;
   if(!list.length){ grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:72px;color:var(--faint);font-size:14px">No inventory matches your filters.</div>'; return; }
 
+  // Group live products by show for sectioned display
+  if(S.liveProducts && list.some(p=>p.show)){
+    const showOrder=['pharmapack','americas','milan','digital'];
+    const showLabels={pharmapack:'Pharmapack',americas:'CPHI Americas',milan:'CPHI Europe / Milan',digital:'Digital & Online'};
+    const byShow={};
+    list.forEach(p=>{ const s=p.show||'digital'; (byShow[s]=byShow[s]||[]).push(p); });
+    grid.innerHTML=showOrder.filter(s=>byShow[s]?.length).map(s=>`
+      <div style="grid-column:1/-1;margin-top:8px">
+        <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:6px 0 14px;border-bottom:1px solid var(--line-2);margin-bottom:18px">${showLabels[s]}</div>
+      </div>
+      ${byShow[s].map(p=>p._slots?groupCard(p):productCard(p)).join('')}
+    `).join('');
+    return;
+  }
   grid.innerHTML=list.map(p=>p._slots?groupCard(p):productCard(p)).join('');
 }
 function groupCard(p){
   const dot=p.avail==='available'?'dot-g':p.avail==='limited'?'dot-a':'dot-r';
   const heldCount=p._slots.filter(s=>s.avail==='sold'&&(s._rawStatus||'').toLowerCase().includes('hold')).length;
   const albl=p._avCount>0?`${p._avCount} of ${p._total} available`:heldCount?`${heldCount} on hold`:'Fully booked';
+  const showBadge={pharmapack:'Pharmapack',americas:'Americas',milan:'Milan',digital:'Digital'}[p.show||'digital']||'Digital';
   return `<div class="card card-i" style="display:flex;flex-direction:column;overflow:hidden">
+    ${p.image?`<div style="height:140px;overflow:hidden;flex-shrink:0"><img src="${p.image}" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`:''}
     <div style="padding:20px 22px;flex:1">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <span class="avail"><span class="dot ${dot}"></span>${albl}</span>
-        <span class="chip chip-digital">Digital</span>
+        <span class="chip chip-digital">${showBadge}</span>
       </div>
-      <div style="font-size:15px;font-weight:600;line-height:1.35;margin-bottom:6px">${p.name}</div>
-      <div style="display:flex;gap:3px;margin-top:10px">
-        ${p._slots.slice(0,12).map(s=>`<span title="${s.name}" style="width:10px;height:10px;border-radius:3px;flex-shrink:0;background:${s.avail==='available'?'var(--green)':s.avail==='limited'?'var(--amber)':'var(--line)'}"></span>`).join('')}
-        ${p._total>12?`<span style="font-size:10px;color:var(--faint);align-self:center;margin-left:3px">+${p._total-12}</span>`:''}
+      <div style="font-size:15px;font-weight:600;line-height:1.35;margin-bottom:8px">${p.name}</div>
+      ${p.desc?`<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:10px">${p.desc}</div>`:''}
+      <div style="display:flex;gap:3px;margin-top:10px;flex-wrap:wrap">
+        ${p._slots.slice(0,16).map(s=>`<span title="${s.name}" style="width:10px;height:10px;border-radius:3px;flex-shrink:0;background:${s.avail==='available'?'var(--green)':s.avail==='limited'?'var(--amber)':'var(--line)'}"></span>`).join('')}
+        ${p._total>16?`<span style="font-size:10px;color:var(--faint);align-self:center;margin-left:3px">+${p._total-16} more</span>`:''}
       </div>
     </div>
     <div style="padding:14px 22px;border-top:1px solid var(--line-2);display:flex;align-items:center;justify-content:space-between">
