@@ -572,23 +572,11 @@ const PROCESS_DESC = {
 function d2(t){return PROCESS_DESC[t]||''}
 
 // ══════════════════════ INTEGRATION CONFIG ══════════════════════
-// Inventory is split by type: ONE digital sheet (all shows + CPHI Online 365) plus
-// THREE sponsorship sheets (one per show). Map each in Sales Desk → Connect data.
-let PROXY_URL = '';
-let SHEET_MAP = { digital:'', milan:'', americas:'', pharmapack:'' };  // slot → Smartsheet sheetId
-// ⚠️ DEMO ONLY: a Gemini key is pre-filled below so AI works out of the box on this
-// local demo. This key is visible to anyone who opens the file — do NOT host this file
-// publicly with the key in it, and ROTATE this key before any real deployment. For
-// production, move the key server-side into the proxy (same as the Smartsheet token).
+// Fixed backend — all users share one proxy and one set of sheets.
+// To update: change PROXY_URL to your deployed Render URL and set the sheet IDs below.
+const PROXY_URL = 'http://localhost:3000';
+let SHEET_MAP = { digital:'2501517592448900', milan:'', americas:'', pharmapack:'' };
 let AI_KEY = '';
-(function(){
-  // Pre-fill connection defaults if nothing saved yet
-  if(!localStorage.getItem('cphi_conn')){
-    const defaults={proxy:'http://localhost:3000',sheets:{digital:'',milan:'',americas:'',pharmapack:''},aikey:''};
-    localStorage.setItem('cphi_conn',JSON.stringify(defaults));
-  }
-  try{ const c=JSON.parse(localStorage.getItem('cphi_conn')||'{}'); if(c.proxy) PROXY_URL=c.proxy; if(c.sheets) SHEET_MAP=Object.assign(SHEET_MAP,c.sheets); if(c.aikey) AI_KEY=c.aikey; }catch(e){}
-})();
 const SHOW_KEYS=['milan','americas','pharmapack'];
 function anySheet(){ return Object.values(SHEET_MAP).some(Boolean); }
 const COL_MAP = {
@@ -707,58 +695,11 @@ function updateDataBadge(){
   else if(PROXY_URL&&anySheet()){ b.innerHTML='<span class="dot dot-a"></span>Connecting…'; b.style.color=''; b.style.borderColor=''; b.style.background=''; }
   else { b.innerHTML='<span class="dot dot-a"></span>Demo data'; b.style.color=''; b.style.borderColor=''; b.style.background=''; }
 }
-// In-app, no-code connection setup (Sales Desk → Connect data). One sheet per show.
-function openSettings(){
-  const proxy=S._proxyDraft||PROXY_URL;
-  const sheets=S._sheets; // [{id,name}] once loaded via /api/sheets
-  const sheetField=(slot)=>{
-    if(sheets) return `<select class="input" id="cn-${slot}"><option value="">— not mapped —</option>${sheets.map(s=>`<option value="${s.id}" ${String(SHEET_MAP[slot])===String(s.id)?'selected':''}>${s.name}</option>`).join('')}</select>`;
-    return `<input class="input" id="cn-${slot}" value="${SHEET_MAP[slot]||''}" placeholder="sheet ID (or Load sheets)">`;
-  };
-  const row=(slot,title,sub)=>`<div style="display:flex;align-items:center;gap:12px">
-    <div style="width:140px;flex-shrink:0"><div style="font-size:13px;font-weight:600">${title}</div><div style="font-size:10.5px;color:var(--faint)">${sub}</div></div>
-    <div style="flex:1">${sheetField(slot)}</div></div>`;
-  showModal(`<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-      <h2 class="serif" style="font-size:21px">Connect live data</h2>
-      <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--faint);width:30px;height:30px"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:18px">Enter your proxy, click <b>Load sheets</b>, then map your <b>digital</b> sheet and the three <b>sponsorship</b> sheets. See <b>cphi-GO-LIVE.md</b>.</p>
-    <div style="display:flex;gap:9px;align-items:flex-end;margin-bottom:18px">
-      <div style="flex:1"><label class="label">Proxy URL</label><input class="input" id="cn-proxy" value="${proxy}" placeholder="https://cphi-proxy.onrender.com"></div>
-      <button class="btn btn-ghost" onclick="loadSheetList()">Load sheets</button></div>
-    <div class="mono-eyebrow" style="color:var(--faint);margin-bottom:10px">Digital inventory</div>
-    <div style="margin-bottom:16px">${row('digital','Digital','All shows + CPHI Online 365 · €')}</div>
-    <div class="mono-eyebrow" style="color:var(--faint);margin-bottom:10px">Sponsorship — one sheet per show</div>
-    <div style="display:grid;gap:11px;margin-bottom:16px">
-      ${row('milan','CPHI Europe','On-site · €')}
-      ${row('americas','CPHI Americas','On-site · US$')}
-      ${row('pharmapack','Pharmapack','On-site · €')}
-    </div>
-    <div id="cn-result" style="font-size:12.5px;margin-bottom:16px;min-height:18px">${sheets?`<span style="color:var(--green)">${sheets.length} sheets available — map each slot.</span>`:''}</div>
-    <div class="mono-eyebrow" style="color:var(--faint);margin:18px 0 10px">AI email writer <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></div>
-    <div><label class="label">Gemini API key</label><input class="input" id="cn-aikey" type="password" value="${AI_KEY}" placeholder="for AI-written client emails (Google AI Studio)"></div>
-    <div style="font-size:10.5px;color:var(--faint);margin:6px 0 16px">Stored only in this browser. Used to draft emails in “Generate for client”. Restrict the key to your domain and rotate it periodically.</div>
-    <button class="btn btn-accent btn-full" onclick="saveConn()">Save & connect</button>
-    ${(PROXY_URL||anySheet()||AI_KEY)?`<div style="text-align:center;margin-top:14px"><button class="btn btn-quiet btn-sm" onclick="clearConn()">Disconnect (back to demo data)</button></div>`:''}`);
-}
-async function loadSheetList(){
-  const proxy=val('cn-proxy').replace(/\/$/,''); const r=document.getElementById('cn-result');
-  if(!proxy){ r.innerHTML='<span style="color:var(--amber)">Enter the proxy URL first.</span>'; return; }
-  r.innerHTML='<span style="color:var(--muted)">Loading sheet list…</span>'; S._proxyDraft=proxy;
-  try{
-    const res=await fetch(`${proxy}/api/sheets`); if(!res.ok) throw new Error('HTTP '+res.status);
-    const data=await res.json(); S._sheets=data.sheets||[];
-    openSettings();
-  }catch(e){ r.innerHTML=`<span style="color:var(--red)">✗ Couldn't reach proxy (${e.message}). Check URL/CORS — or paste sheet IDs manually.</span>`; }
-}
-function saveConn(){
-  PROXY_URL=(val('cn-proxy')||S._proxyDraft||'').replace(/\/$/,'');
-  const sheets={}; ['digital','milan','americas','pharmapack'].forEach(k=>{ sheets[k]=val('cn-'+k)||''; });
-  SHEET_MAP=sheets; AI_KEY=val('cn-aikey').trim();
-  localStorage.setItem('cphi_conn',JSON.stringify({proxy:PROXY_URL,sheets,aikey:AI_KEY}));
-  S.liveProducts=null; S.loadingProducts=false; updateDataBadge(); closeModal();
-  if(PROXY_URL&&anySheet()){ toast('Connecting to live data…'); loadLiveProducts(true); } else toast(AI_KEY?'Saved — AI email writer on':'Saved — using demo data');
-}
-function clearConn(){ localStorage.removeItem('cphi_conn'); PROXY_URL=''; SHEET_MAP={digital:'',milan:'',americas:'',pharmapack:''}; AI_KEY=''; S.liveProducts=null; S.liveSlots=null; S._sheets=null; S._proxyDraft=''; updateDataBadge(); closeModal(); toast('Disconnected — demo data'); }
+// Connection is fixed — no user-configurable settings
+function openSettings(){ /* removed — backend is locked */ }
+function saveConn(){ /* removed */ }
+function clearConn(){ /* removed */ }
+async function loadSheetList(){ /* removed */ }
 
 // ── VALUE / ROI MODEL (estimates until live audience data is connected) ──
 const AUDIENCE={milan:45000,americas:18000,pharmapack:9000,online365:120000};
@@ -2129,7 +2070,6 @@ function renderDashboard(){
     <div><div class="mono-eyebrow" style="margin-bottom:6px">Sales Desk</div><h1 class="serif" style="font-size:30px">Submissions</h1></div>
     <div style="display:flex;gap:9px;align-items:center">
       <button class="btn btn-accent btn-sm" onclick="openAMGen()"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.6 3.2 3.5.5-2.5 2.5.6 3.5L8 9.6 4.8 11.7l.6-3.5L2.9 5.7l3.5-.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>Generate for client</button>
-      <button class="btn btn-ghost btn-sm" onclick="openSettings()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v2M8 12v2M2 8h2M12 8h2M4 4l1.4 1.4M10.6 10.6L12 12M12 4l-1.4 1.4M5.4 10.6L4 12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.2"/></svg>Connect data</button>
       <button class="btn btn-ghost btn-sm" onclick="S.authd=false;renderDashboard()">Sign out</button></div></div>
   <div class="g4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
     ${[['Total requests',subs.length],['Pending',pending],['In discussion',contacted],['Pipeline value',money(pipeline)]].map(([l,v])=>`
