@@ -575,14 +575,18 @@ function d2(t){return PROCESS_DESC[t]||''}
 // Fixed backend — all users share one proxy and one set of sheets.
 // To update: change PROXY_URL to your deployed Render URL and set the sheet IDs below.
 const PROXY_URL = 'https://cphi-sponsorship.onrender.com';
-let SHEET_MAP = { digital:'2501517592448900', milan:'', americas:'', pharmapack:'' };
+const SDL_SHEET = '3596138581020548'; // test SDL — single source of truth
+let SHEET_MAP = { sdl: SDL_SHEET };
 let AI_KEY = '';
-const SHOW_KEYS=['milan','americas','pharmapack'];
-function anySheet(){ return Object.values(SHEET_MAP).some(Boolean); }
+const SHOW_KEYS=['CPHI Europe','CPHI Americas','Pharmapack','Digital'];
+function anySheet(){ return !!SDL_SHEET; }
 const COL_MAP = {
-  name:'Event Product Name', category:'Product Class Description', price:'Product Price', availability:'Status (Hold or Sold)',
-  channel:'Event Code', description:'Product Class Description', events:'Event Code', objectives:'Product Class Description',
-  holdStatus:'Status (Hold or Sold)', image:'', unitsLeft:'',
+  rowType:'Row Type', family:'Product Family', name:'Product Name',
+  show:'Show', format:'Format', description:'Description',
+  objectives:'Objectives', reach:'Audience Reach', price:'Price (EUR)',
+  availability:'Status', startDate:'Start Date', endDate:'End Date',
+  holdStatus:'Status',
+  companyName:'Company Name', contactName:'Contact Name', customerEmail:'Customer Email', holdDate:'Hold Date',
 };
 
 // Official show PDFs the proposal overlays onto. Host each at a public URL (CORS-enabled),
@@ -629,116 +633,102 @@ const ICON={
 
 // ══════════════════════ SMARTSHEET ══════════════════════
 
-// Detect which show a product belongs to from its name
-function detectShowFromName(name){
-  const n=(name||'').toLowerCase();
-  if(n.includes('pharmapack')) return 'pharmapack';
-  if(n.includes("america")) return 'americas';
-  if(n.includes('frankfurt')||n.includes('cphi europe')||n.includes('milan')) return 'milan';
-  return 'digital';
-}
-
-// Map product class to a representative image and description
-const CLASS_META = {
-  'Display ad_Top position - CO Newsletter':    { img:'https://images.unsplash.com/photo-1587614382346-4ec70e388b28?w=400&q=60', desc:'Premium top-position banner in the CPHI Online Newsletter, reaching thousands of pharma professionals each week.' },
-  'Display ad_Middle position - CO Newsletter': { img:'https://images.unsplash.com/photo-1587614382346-4ec70e388b28?w=400&q=60', desc:'High-visibility mid-position banner in the CPHI Online Newsletter for consistent brand exposure.' },
-  'Column advertisement (DELE-Event)':          { img:'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=400&q=60', desc:'Full-height column advertisement on the event platform, offering prominent digital presence throughout the event.' },
-  'Pop Up & Push Notification Combo on SC':     { img:'https://images.unsplash.com/photo-1616469829581-73993eb86b02?w=400&q=60', desc:'Powerful combo of pop-up and push notifications on Showcare, driving immediate delegate engagement.' },
-  'Company Profile Enhance Package on SC':      { img:'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=400&q=60', desc:'Enhanced company profile on Showcare with premium placement and enriched content to attract buyers.' },
-  'Exhibitor Listing Booster Package on SC':    { img:'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=400&q=60', desc:'Boosted exhibitor listing on Showcare, increasing visibility among attending buyers and visitors.' },
-  'Featured Products Highlight on SC':          { img:'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?w=400&q=60', desc:'Spotlight your products in the Featured Products section on Showcare for maximum buyer discovery.' },
-  'Top Banner Exhibitor List on SC':            { img:'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=400&q=60', desc:'Premium top banner on the Showcare exhibitor list, seen by every delegate browsing exhibitors.' },
-  'Top Banner Product List on SC':              { img:'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=400&q=60', desc:'Top banner placement on the Showcare product list, capturing delegates actively searching for solutions.' },
-  'Custom Webinar':                             { img:'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60', desc:'Branded webinar hosted on the CPHI platform, positioning your company as a thought leader.' },
-  'Editorial Trend Report':                     { img:'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&q=60', desc:'Co-branded editorial trend report distributed to the CPHI audience, combining insight with brand exposure.' },
-  'Editorial Webinar':                          { img:'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60', desc:'Editorial-led webinar with CPHI branding, delivering thought leadership content to pharma professionals.' },
-  'FastChat':                                   { img:'https://images.unsplash.com/photo-1560439514-4e9645039924?w=400&q=60', desc:'Short-form on-site interview format capturing key messages in a fast, engaging video format.' },
-  'Event Extension':                            { img:'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&q=60', desc:'Extend your event presence with post-show digital content that keeps your brand visible after the doors close.' },
-  'Webinar Content Multiplier':                 { img:'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60', desc:'Amplify your webinar reach through CPHI channels, multiplying audience engagement beyond the live session.' },
-  'Event Content Multiplier':                   { img:'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&q=60', desc:'Boost your on-site content across CPHI digital platforms for extended reach and ROI.' },
-  'Webinar Key Takeaways':                      { img:'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60', desc:'Professionally produced key takeaways from your webinar, distributed as evergreen content.' },
-  'Event Guide Pre Event (Frankfurt 2025)':     { img:'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&q=60', desc:'Prominent placement in the official pre-event guide distributed to all registered attendees before the show.' },
-  'Event Key Takeaways (Frankfurt 2025)':       { img:'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&q=60', desc:'Your brand featured in the official post-event key takeaways report, distributed to all CPHI attendees.' },
+// Format → image mapping
+const FORMAT_IMG = {
+  'Newsletter':        'https://images.unsplash.com/photo-1587614382346-4ec70e388b28?w=400&q=60',
+  'Column Ad':         'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=400&q=60',
+  'Push Notification': 'https://images.unsplash.com/photo-1616469829581-73993eb86b02?w=400&q=60',
+  'Showcare Listing':  'https://images.unsplash.com/photo-1553877522-43269d4ea984?w=400&q=60',
+  'Webinar':           'https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=400&q=60',
+  'Content':           'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&q=60',
 };
-const DEFAULT_META = { img:'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=400&q=60', desc:'Premium sponsorship opportunity at one of the world\'s leading pharmaceutical industry events.' };
+const DEFAULT_IMG = 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=400&q=60';
 
-// Fetches each mapped show-sheet and tags its rows with that show.
+// Show name → internal key used by EVENTS map
+const SHOW_KEY_MAP = { 'CPHI Europe':'milan', 'CPHI Americas':'americas', 'Pharmapack':'pharmapack', 'Digital':'digital' };
+
 async function loadLiveProducts(announce){
   if(!PROXY_URL||!anySheet()) return;
   if(S.loadingProducts) return;
   S.loadingProducts=true; updateDataBadge();
   try{
-    const all=[]; let failed=[];
-    for(const [slot,sid] of Object.entries(SHEET_MAP)){
-      if(!sid) continue;
-      try{
-        const res=await fetch(`${PROXY_URL}/api/products/${sid}`);
-        if(!res.ok) throw new Error('HTTP '+res.status);
-        const data=await res.json();
+    const res=await fetch(`${PROXY_URL}/api/products/${SDL_SHEET}`);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const rows=data.products||[];
 
-        // Collect parent row descriptions (rows with "(X slots)" in name)
-        const parentDesc={};
-        data.products.filter(r=>/\(\d+\s*slots?\)/i.test(r[COL_MAP.name]||'')).forEach(r=>{
-          const cat=r[COL_MAP.category];
-          const show=detectShowFromName(r[COL_MAP.name]);
-          if(cat) parentDesc[show+'|'+cat]=r[COL_MAP.name].replace(/\s*\(\d+\s*slots?\)/i,'').trim();
-        });
+    // Index Product rows by Product Family
+    const productMeta={};
+    rows.filter(r=>r[COL_MAP.rowType]==='Product').forEach(r=>{
+      const fam=r[COL_MAP.family]||r[COL_MAP.name];
+      productMeta[fam]={
+        desc:   r[COL_MAP.description]||'',
+        image:  FORMAT_IMG[r[COL_MAP.format]]||DEFAULT_IMG,
+        objs:   (r[COL_MAP.objectives]||'').split(',').map(o=>o.trim()).filter(Boolean),
+        reach:  parseInt(r[COL_MAP.reach])||0,
+        price:  parseFloat((r[COL_MAP.price]||'0').toString().replace(/[^0-9.]/g,''))||0,
+        show:   r[COL_MAP.show]||'Digital',
+        format: r[COL_MAP.format]||'',
+      };
+    });
 
-        data.products
-          .filter(r=>r[COL_MAP.name] && r[COL_MAP.category] && !/\(\d+\s*slots?\)/i.test(r[COL_MAP.name]))
-          .forEach((r,i)=>{
-            const show = detectShowFromName(r[COL_MAP.name]);
-            const evts = show==='digital' ? [...SHOW_KEYS,'online365'] : [show];
-            const meta = CLASS_META[r[COL_MAP.category]] || DEFAULT_META;
-            const parentName = parentDesc[show+'|'+r[COL_MAP.category]] || '';
-            all.push({
-              id:'ss-'+slot+'-'+(r._rowId||i), _rowId:r._rowId, _sheet:sid,
-              name:r[COL_MAP.name]||'', cat:r[COL_MAP.category]||'Other',
-              price:parseFloat((r[COL_MAP.price]||'0').toString().split('/')[0].replace(/[^0-9.]/g,''))||0,
-              avail:normAvail(r[COL_MAP.availability]), _rawStatus:r[COL_MAP.availability]||'',
-              channel:'online',
-              desc:meta.desc, image:meta.img,
-              parentName,
-              show,
-              units:null,
-              events:evts,
-              objectives:[],
-            });
-          });
-      }catch(e){ failed.push(slot==='digital'?'Digital':(EVENTS[slot]?.short||slot)); }
-    }
-    // Group by show + Product Class Description
-    const slotMap = new Map();
-    all.forEach(p=>{
-      const k=p.show+'|'+p.cat;
-      if(!slotMap.has(k)) slotMap.set(k,[]);
-      slotMap.get(k).push(p);
+    // Build slot objects from Slot rows
+    const slots=[];
+    rows.filter(r=>r[COL_MAP.rowType]==='Slot').forEach((r,i)=>{
+      const fam=r[COL_MAP.family]||'';
+      const meta=productMeta[fam]||{};
+      const showLabel=r[COL_MAP.show]||meta.show||'Digital';
+      const showKey=SHOW_KEY_MAP[showLabel]||'digital';
+      const evts=showKey==='digital'?['milan','americas','pharmapack','digital']:[showKey];
+      const dateRange=([r[COL_MAP.startDate],r[COL_MAP.endDate]].filter(Boolean).join(' → '));
+      slots.push({
+        id:'sdl-'+( r._rowId||i), _rowId:r._rowId, _sheet:SDL_SHEET,
+        name:r[COL_MAP.name]||'', family:fam,
+        cat:fam, show:showKey, showLabel,
+        price:parseFloat((r[COL_MAP.price]||meta.price||'0').toString().replace(/[^0-9.]/g,''))||meta.price||0,
+        avail:normAvail(r[COL_MAP.availability]), _rawStatus:r[COL_MAP.availability]||'',
+        desc:meta.desc, image:meta.image||DEFAULT_IMG,
+        objectives:meta.objs||[], reach:meta.reach||0,
+        format:r[COL_MAP.format]||meta.format||'',
+        dateRange, events:evts, channel:'online', units:null,
+      });
     });
-    const grouped = [];
-    slotMap.forEach((slots,key)=>{
-      const avCount=slots.filter(s=>s.avail==='available').length;
-      const ltdCount=slots.filter(s=>s.avail==='limited').length;
-      const s0=slots[0];
-      const meta=CLASS_META[s0.cat]||DEFAULT_META;
-      const gid='grp-'+key.replace(/[^a-z0-9]/gi,'-').toLowerCase();
-      grouped.push({ id:gid, name:s0.cat, cat:s0.cat,
-        price:s0.price, avail:avCount>0?'available':ltdCount>0?'limited':'sold',
-        channel:'online', events:s0.events, desc:meta.desc, image:meta.img, units:null,
-        show:s0.show, objectives:[],
-        _slots:slots, _avCount:avCount, _total:slots.length });
+
+    // Group slots by Product Family
+    const familyMap=new Map();
+    slots.forEach(s=>{ if(!familyMap.has(s.family)) familyMap.set(s.family,[]); familyMap.get(s.family).push(s); });
+
+    const grouped=[];
+    familyMap.forEach((fslots,fam)=>{
+      const meta=productMeta[fam]||{};
+      const avCount=fslots.filter(s=>s.avail==='available').length;
+      const ltdCount=fslots.filter(s=>s.avail==='limited').length;
+      const s0=fslots[0];
+      grouped.push({
+        id:'grp-'+fam.replace(/[^a-z0-9]/gi,'-').toLowerCase(),
+        name:fam, cat:fam, show:s0.show, showLabel:s0.showLabel,
+        price:meta.price||s0.price,
+        avail:avCount>0?'available':ltdCount>0?'limited':'sold',
+        channel:'online', events:s0.events,
+        desc:meta.desc, image:meta.image||DEFAULT_IMG,
+        objectives:meta.objs||[], reach:meta.reach||0,
+        format:meta.format||'', units:null,
+        _slots:fslots, _avCount:avCount, _total:fslots.length,
+      });
     });
-    S.liveProducts = grouped.length?grouped:null;
-    S.liveSlots = slotMap;
+
+    S.liveProducts=grouped.length?grouped:null;
+    S.liveSlots=familyMap;
     if(S.page==='products') renderProducts();
     if(S.page==='builder') renderBuilder();
     updateDataBadge();
-    if(announce){ if(grouped.length) toast(`Live — ${grouped.length} products · ${all.length} slots loaded${failed.length?' ('+failed.join(', ')+' failed)':''}`); else toast('No live data loaded — check mapping',true); }
+    if(announce){ if(grouped.length) toast(`Live — ${grouped.length} products · ${slots.length} slots`); else toast('No data — check SDL sheet',true); }
   }catch(e){ console.warn('Smartsheet load failed:',e.message); }
   finally{ S.loadingProducts=false; }
 }
 function normAvail(r){ if(!r)return'available'; const v=r.toLowerCase(); if(v.includes('sold')||v.includes('out')||v.includes('completed')||v.includes('not possible')||v.includes('hold'))return'sold'; if(v.includes('limited')||v.includes('few'))return'limited'; return'available'; }
 function normChan(r){ if(!r)return'event'; const v=r.toLowerCase(); if(v.includes('both')||(v.includes('event')&&v.includes('digital')))return'both'; if(v.includes('digital')||v.includes('online'))return'online'; return'event'; }
-function getProducts(){ return S.liveProducts||PRODUCTS; }
+function getProducts(){ return S.liveProducts||[]; }
 function findProduct(id){
   const direct=getProducts().find(x=>x.id===id);
   if(direct) return direct;
@@ -811,29 +801,28 @@ function catLabel(c){ return c; }
 
 // Soft-hold: reserve / release a row in Smartsheet when added to / removed from package
 async function softHold(p, action, clientInfo={}){
-  const sid = p._sheet || (p.channel==='online'?SHEET_MAP.digital:SHEET_MAP[(p.events&&p.events[0])||'']);
+  const sid = p._sheet || SDL_SHEET;
   if(!PROXY_URL||!sid||!p._rowId) return { ok:true, demo:true };
-  const status = action==='hold'?'On Hold':'Available';
+  const status = action==='hold'?'On Hold':'';
   const body = { column:COL_MAP.holdStatus, status };
   if(action==='hold' && clientInfo.co){
     const now = new Date();
-    const today = now.toISOString().split('T')[0]; // YYYY-MM-DD for Smartsheet DATE columns
+    const today = now.toISOString().split('T')[0];
     const todayDisplay = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
     body.fields = {
-      'Company Name': clientInfo.co || '',
-      'Contact Name': clientInfo.contact || '',
-      'Customer E-mail Address': clientInfo.email || '',
-      'Sold Date/Hold Date (Please change accordingly)': today,
+      [COL_MAP.companyName]: clientInfo.co || '',
+      [COL_MAP.contactName]: clientInfo.contact || '',
+      [COL_MAP.customerEmail]: clientInfo.email || '',
+      [COL_MAP.holdDate]: today,
     };
     if(clientInfo.ref) body.comment = `IO Reference: ${clientInfo.ref} | Generated: ${todayDisplay} | Contact: ${clientInfo.contact} <${clientInfo.email}>`;
   }
   if(action==='release'){
-    body.status = '';
     body.fields = {
-      'Company Name': '',
-      'Contact Name': '',
-      'Customer E-mail Address': '',
-      'Sold Date/Hold Date (Please change accordingly)': null,
+      [COL_MAP.companyName]: '',
+      [COL_MAP.contactName]: '',
+      [COL_MAP.customerEmail]: '',
+      [COL_MAP.holdDate]: null,
     };
   }
   try{
@@ -1346,7 +1335,7 @@ function groupCard(p){
   const dot=p.avail==='available'?'dot-g':p.avail==='limited'?'dot-a':'dot-r';
   const heldCount=p._slots.filter(s=>s.avail==='sold'&&(s._rawStatus||'').toLowerCase().includes('hold')).length;
   const albl=p._avCount>0?`${p._avCount} of ${p._total} available`:heldCount?`${heldCount} on hold`:'Fully booked';
-  const showBadge={pharmapack:'Pharmapack',americas:'Americas',milan:'Milan',digital:'Digital'}[p.show||'digital']||'Digital';
+  const showBadge=p.showLabel||{pharmapack:'Pharmapack',americas:'Americas',milan:'Milan',digital:'Digital'}[p.show||'digital']||'Digital';
   return `<div class="card card-i" style="display:flex;flex-direction:column;overflow:hidden">
     ${p.image?`<div style="height:140px;overflow:hidden;flex-shrink:0"><img src="${p.image}" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`:''}
     <div style="padding:20px 22px;flex:1">
